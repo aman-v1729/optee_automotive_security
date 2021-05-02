@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "authenticated_encryption_ta.h": "c",
+        "stdlib.h": "c"
+    }
+}
