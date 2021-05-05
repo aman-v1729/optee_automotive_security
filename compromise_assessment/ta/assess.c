@@ -5,7 +5,7 @@
 
 //#include <tee_internal_api_extensions.h>
 
-#include <test_ta.h>
+#include <assess.h>
 
 static TEE_Result delete_object(uint32_t param_types, TEE_Param params[4])
 {

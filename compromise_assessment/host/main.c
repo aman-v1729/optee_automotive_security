@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <tee_client_api.h>
 
-#include <test_ta.h>
+#include <assess.h>
 
 struct ta_attrs
 {
@@ -33,7 +33,7 @@ struct MerkleTree *Node(char *hash_value)
 
 void prepare_ta_session(struct ta_attrs *ta)
 {
-	TEEC_UUID uuid = TA_TEST_UUID;
+	TEEC_UUID uuid = TA_COMPROMISE_ASSESSMENT_UUID;
 	uint32_t origin;
 	TEEC_Result res;
 
@@ -287,7 +287,7 @@ int main(int argc, char *argv[])
 			strcat(str, node[2 * i + 1]->hash);
 			struct MerkleTree *left = node[2 * i];
 			struct MerkleTree *right = node[2 * i + 1];
-			// printf("concat: %s\n", str);
+			printf("concat: %s\n", str);
 			send_to_tee(&ta, str, 128, out_word, bufferLength, TA_SHA256);
 			node[i] = Node((char *)hashed);
 			node[i]->left = left;
@@ -312,7 +312,7 @@ int main(int argc, char *argv[])
 	strcpy(merkle_root, root->hash);
 
 	printf("ROOT: %s\n", merkle_root);
-	// printf("ROOT SIZE: %d\n", strlen(merkle_root));
+	printf("ROOT: %d\n", strlen(merkle_root));
 	// printf("%s", word);
 	char read_data[bufferLength];
 	TEEC_Result res;

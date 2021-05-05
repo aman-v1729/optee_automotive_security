@@ -1,4 +1,4 @@
-project (test_ta C)
+project (assess C)
 
 set (SRC host/main.c)
 
