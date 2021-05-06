@@ -12,13 +12,22 @@
 #define MAX_PLAIN_LEN_1024 86 // (1024/8) - 42 (padding)
 #define RSA_CIPHER_LEN_1024 (RSA_KEY_SIZE / 8)
 #define SIZE_OF_VEC(vec) (sizeof(vec) - 1)
-
+#define HMAC_SHA1_KEY_SIZE_BYTES 16
+#define SHA1_SIZE_BYTES 20
 // uint8_t modulus[] = "\x80\x55\x45\x4b\x27\xd0\x55\x80\x7a\xc9\x12\x6b\x8e\x7b\xb2\x70\x01\x5f\x63\x0a\xb5\x5a\x74\xc9\x26\x88\x30\xbe\x10\x4d\xd6\x6c\x42\x5a\x9c\xe2\x94\x45\x52\xdb\xa0\x82\xe6\x2d\xbd\x7c\x84\x53\xd3\x32\x6e\xf2\x1e\xae\x1d\x5c\x10\x29\x45\xfa\xb8\x5f\xb3\x71\xe8\x76\x0d\x52\xc1\x2e\x68\xc7\x2a\x3a\x1d\xef\x7e\xe2\xd2\x87\xc2\xea\xb4\x91\xb4\xbe\x6e\xf1\x26\x68\xbd\x0a\x14\xb8\xdc\x5a\x60\xbd\x50\xbd\xa4\x87\x51\xaa\x99\x32\x2f\xe3\x1f\x76\x8e\x6f\xa1\x8f\xad\xf9\xf6\x98\xaa\x1a\xc6\x3b\x8f\x91\xc5\x89\xda\xfd";
 
 // uint8_t public_exp[] = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x01";
 
 uint8_t private_exp[] = "\x67\xa2\xf5\x13\xad\x72\x5c\x2a\x26\x7e\x4c\xc6\xd9\x48\xe1\x9f\xfc\x2b\xc8\xf2\xf3\xe3\xb9\xde\x5b\xa4\xae\x20\x3f\x50\x6c\xb1\xfe\x9f\xe8\x84\x3e\x13\x01\xc7\xe5\x86\xf0\x55\xcd\xe9\x49\x7f\xdc\x55\xa5\x2d\x18\x43\xa9\xe8\x18\x11\x0c\xb7\x5d\xbf\xc3\x4c\x32\x3f\xc9\x85\x03\xd7\xa8\x47\xd4\xec\xd3\x37\xbb\x8a\xfc\xf8\xb8\x79\x0f\x36\x19\xbf\xbb\xf7\xd2\x57\x7d\x52\x8f\x57\x77\x84\x0b\xb8\x1f\xbc\x5f\xa6\x46\x1b\xf9\x4b\xaa\xf1\x5b\xc1\xe1\xb6\xdc\x16\x96\x2e\x91\xa3\x06\x1e\x20\xbf\xd0\x3a\xd6\x6f\x3d\xcd";
 uint8_t target_private_exp[] = "\x67\x6b\x2f\xb0\x4c\xae\xbe\x33\x11\x27\xc1\x81\x86\x3b\xb3\xd3\x90\xc6\x77\xfd\x70\xd4\x03\xe8\xa7\xe4\x55\x05\x62\xb0\x75\xcd\xb3\xb8\x77\x85\x0a\xef\x71\x7d\xa6\xce\x97\x75\xa9\xe2\x11\x79\x2d\x2f\x73\xae\x24\x7b\x7c\x18\xce\x80\x0f\xbd\xc1\xd6\x3a\x6d\xef\xac\x6d\x83\xe8\xe3\xca\x01\x42\x17\xc5\x3e\x94\xde\xf0\xd2\xcf\xbd\xb8\x29\xd3\x5b\xe0\xad\x46\x1c\x9e\xa7\x7e\xe0\x0c\x55\xcb\xdc\x2d\x5b\x2c\x3b\xdd\xfb\xa5\x3e\x4c\xd9\x52\x90\x3a\xee\xc3\x44\x74\x6f\x3d\x44\xdf\x3c\x76\x9a\x48\x71\xb4\xe4\x16\xd1";
+
+void generate_random(int n, void *buf)
+{
+	if (!buf)
+		return TEE_ERROR_OUT_OF_MEMORY;
+	TEE_GenerateRandom(buf, n);
+	DMSG("\nGenerated: %s\n", (char *)buf);
+}
 
 TEE_Result check_params(uint32_t param_types)
 {
@@ -34,126 +43,57 @@ TEE_Result check_params(uint32_t param_types)
 	return TEE_SUCCESS;
 }
 
-int mystrlen(char *p)
-{
-	int c = 0;
-	while (*p != '\0')
-	{
-		c++;
-		*p++;
-	}
-	return (c);
-}
-
-TEE_Result ta_entry_sha256(uint32_t param_types, TEE_Param params[4])
-{
-	/*
-	 * It is expected that memRef[0] is input buffer and memRef[1] is
-	 * output buffer.
-	 */
-	if (param_types !=
-		TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
-						TEE_PARAM_TYPE_MEMREF_OUTPUT, TEE_PARAM_TYPE_NONE,
-						TEE_PARAM_TYPE_NONE))
-	{
-		return TEE_ERROR_BAD_PARAMETERS;
-	}
-
-	if (params[1].memref.size < SHA256_DIGEST_SIZE)
-		return TEE_ERROR_BAD_PARAMETERS;
-	unsigned char *digest;
-	unsigned char *plain_txt = params[0].memref.buffer;
-
-	sha256((unsigned char *)plain_txt,
-		   RSA_CIPHER_LEN_1024,
-		   (unsigned char *)digest);
-
-	DMSG(digest);
-	DMSG("okay!");
-
-	memcpy(params[1].memref.buffer, digest, 32);
-	DMSG("okay!");
-	return TEE_SUCCESS;
-}
-
 TEE_Result hash_SHA256(void *session_id, uint32_t param_types, TEE_Param params[4])
 {
-	// if (check_params(param_types) != TEE_SUCCESS)
-	// 	return TEE_ERROR_BAD_PARAMETERS;
+	TEE_Result res = TEE_ERROR_GENERIC;
+	static TEE_OperationHandle digest_op = NULL;
 
-	DMSG("ENTERED SHA256");
-	// TEE_Result res;
-	void *plain_txt = params[0].memref.buffer;
-	// DMSG(plain_txt);
-	// uint32_t plain_len = params[0].memref.size;
-	// DMSG(plain_len);
-	// void *hash = params[1].memref.buffer;
-	// uint32_t hash_len = params[1].memref.size;
+	uint32_t algo = 0;
+	uint32_t exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
+											   TEE_PARAM_TYPE_MEMREF_OUTPUT,
+											   TEE_PARAM_TYPE_NONE,
+											   TEE_PARAM_TYPE_NONE);
 
-	ta_entry_sha256(param_types, params);
-	// sha256_digest(plain_txt);
-
-	// DMSG(hash);
-	// 	TEE_OperationHandle l_OperationHandle;
-	// 	res = TEE_AllocateOperation(&l_OperationHandle, TEE_ALG_SHA256, TEE_MODE_DIGEST, 0);
-	//     if(res != TEE_SUCCESS)
-	//     {
-	//         DMSG("Allocate SHA operation handle fail\n");
-	// 		return TEE_ERROR_BAD_PARAMETERS;
-	//     }
-	// 	DMSG("WORKING 1!");
-
-	//     TEE_DigestUpdate(l_OperationHandle, plain_txt, plain_len);
-	// 	DMSG("WORKING 2!");
-
-	//     /**4) Do the final sha operation */
-	// 	res = TEE_DigestDoFinal(l_OperationHandle, NULL, 0, hash, hash_len);
-	// 	DMSG("WORKING 3!");
-
-	// 	if(res != TEE_SUCCESS)
-	//     {
-	//         DMSG("Do the final sha operation fail\n");
-	// 		return TEE_ERROR_BAD_PARAMETERS;
-	//     }
-	// 	DMSG("The out put length is :%d\n", *hash_len);
-	//     // DMSG(*hash);
-
-	// 	return TEE_SUCCESS;
-}
-
-static TEE_Result create_raw_object(uint32_t param_types, TEE_Param params[4])
-{
-	const uint32_t exp_param_types =
-		TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
-						TEE_PARAM_TYPE_MEMREF_INPUT,
-						TEE_PARAM_TYPE_NONE,
-						TEE_PARAM_TYPE_NONE);
-	TEE_ObjectHandle object;
-	TEE_Result res;
-	char *obj_id;
-	size_t obj_id_sz;
-	char *data;
-	size_t data_sz;
-	uint32_t obj_data_flag;
-
-	/*
-	 * Safely get the invocation parameters
-	 */
 	if (param_types != exp_param_types)
 		return TEE_ERROR_BAD_PARAMETERS;
 
-	obj_id_sz = params[0].memref.size;
-	obj_id = TEE_Malloc(obj_id_sz, 0);
-	if (!obj_id)
-		return TEE_ERROR_OUT_OF_MEMORY;
+	algo = TEE_ALG_SHA256;
 
-	TEE_MemMove(obj_id, params[0].memref.buffer, obj_id_sz);
-	DMSG(obj_id);
-	data_sz = params[1].memref.size;
-	data = TEE_Malloc(data_sz, 0);
-	if (!data)
-		return TEE_ERROR_OUT_OF_MEMORY;
-	TEE_MemMove(data, params[1].memref.buffer, data_sz);
+	if (digest_op)
+		TEE_FreeOperation(digest_op);
+
+	res = TEE_AllocateOperation(&digest_op, algo, TEE_MODE_DIGEST, 0);
+
+	if (res != TEE_SUCCESS)
+	{
+		EMSG("Error in setting hash function!");
+		return res;
+	}
+	void *in = NULL;
+	void *out = NULL;
+	uint32_t insz = 0;
+	uint32_t outsz = 0;
+	uint32_t offset = 0;
+
+	if (param_types != exp_param_types)
+		return TEE_ERROR_BAD_PARAMETERS;
+
+	in = (uint8_t *)params[0].memref.buffer;
+	insz = params[0].memref.size;
+	out = params[1].memref.buffer;
+	outsz = params[1].memref.size;
+
+	res = TEE_DigestDoFinal(digest_op, in, insz, out, &outsz);
+
+	return res;
+}
+
+static TEE_Result create_raw_object(char *obj_id, size_t obj_id_sz, char *data, size_t data_sz)
+{
+	TEE_ObjectHandle object;
+	TEE_Result res;
+
+	uint32_t obj_data_flag;
 
 	/*
 	 * Create object in secure storage and fill with data
@@ -187,45 +127,20 @@ static TEE_Result create_raw_object(uint32_t param_types, TEE_Param params[4])
 	{
 		TEE_CloseObject(object);
 	}
-	TEE_Free(obj_id);
-	TEE_Free(data);
+	DMSG(obj_id);
+	DMSG(data);
 	return res;
 }
 
-// static char *read_raw_object(uint32_t param_types, TEE_Param params[4])
 static char *read_raw_object(char *obj_id, size_t obj_id_sz, size_t data_sz)
 {
 	DMSG("Reading!");
-	// const uint32_t exp_param_types =
-	// 	TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
-	// 					TEE_PARAM_TYPE_MEMREF_OUTPUT,
-	// 					TEE_PARAM_TYPE_NONE,
-	// 					TEE_PARAM_TYPE_NONE);
 	TEE_ObjectHandle object;
 	TEE_ObjectInfo object_info;
 	TEE_Result res;
 	uint32_t read_bytes;
-	// char *obj_id;
-	// size_t obj_id_sz;
 	char *data;
 
-	/*
-	 * Safely get the invocation parameters
-	 */
-	// if (param_types != exp_param_types)
-	// 	return "FAIL!";
-	// return TEE_ERROR_BAD_PARAMETERS;
-
-	// obj_id_sz = params[0].memref.size;
-	// obj_id = TEE_Malloc(obj_id_sz, 0);
-	// if (!obj_id)
-	// 	return "FAIL!";
-	// return TEE_ERROR_OUT_OF_MEMORY;
-
-	// TEE_MemMove(obj_id, params[0].memref.buffer, obj_id_sz);
-
-	// data_sz = params[1].memref.size;
-	// data_sz = 16;
 	data = TEE_Malloc(data_sz, 0);
 	if (!data)
 		return "FAIL!";
@@ -269,7 +184,6 @@ static char *read_raw_object(char *obj_id, size_t obj_id_sz, size_t data_sz)
 	res = TEE_ReadObjectData(object, data, object_info.dataSize,
 							 &read_bytes);
 	DMSG(data);
-	DMSG("READ!");
 	if (res == TEE_SUCCESS)
 		return data;
 	// TEE_MemMove(params[1].memref.buffer, data, read_bytes);
@@ -290,7 +204,6 @@ exit:
 	// return res;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////
 static TEE_Result hmac_sha1(void *session, uint32_t param_types,
 							TEE_Param params[4])
 {
@@ -301,24 +214,13 @@ static TEE_Result hmac_sha1(void *session, uint32_t param_types,
 
 	unsigned char *key;
 	size_t keylen = 16;
-	strcpy(key, read_raw_object("hmackey", 7, keylen));
-
+	memcpy(key, read_raw_object("hmackey", 7, keylen), keylen);
+	DMSG(key);
 	TEE_Attribute attr = {0};
 	TEE_ObjectHandle key_handle = TEE_HANDLE_NULL;
 	TEE_OperationHandle op_handle = TEE_HANDLE_NULL;
 	TEE_Result res = TEE_SUCCESS;
 
-	// if (keylen < MIN_KEY_SIZE || keylen > MAX_KEY_SIZE)
-	// 	return TEE_ERROR_BAD_PARAMETERS;
-
-	// if (!in || !out || !outlen)
-	// 	return TEE_ERROR_BAD_PARAMETERS;
-
-	/*
-	 * 1. Allocate cryptographic (operation) handle for the HMAC operation.
-	 *    Note that the expected size here is in bits (and therefore times
-	 *    8)!
-	 */
 	res = TEE_AllocateOperation(&op_handle, TEE_ALG_HMAC_SHA1, TEE_MODE_MAC,
 								keylen * 8);
 	if (res != TEE_SUCCESS)
@@ -376,8 +278,6 @@ exit:
 	return res;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////
-
 struct rsa_session
 {
 	TEE_OperationHandle op_handle; /* RSA operation */
@@ -420,7 +320,7 @@ TEE_Result RSA_set_key_pair(void *session, uint32_t param_types,
 	const uint32_t exp_param_types =
 		TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
 						TEE_PARAM_TYPE_MEMREF_INPUT,
-						TEE_PARAM_TYPE_MEMREF_INPUT,
+						TEE_PARAM_TYPE_VALUE_INPUT,
 						TEE_PARAM_TYPE_NONE);
 
 	if (param_types != exp_param_types)
@@ -436,11 +336,11 @@ TEE_Result RSA_set_key_pair(void *session, uint32_t param_types,
 	mod = params[1].memref.buffer;
 	mod_sz = params[1].memref.size;
 
-	if (params[2].memref.size == 2)
+	if (params[2].value.a == 2)
 		priv_key = (char *)private_exp;
-	else if (params[2].memref.size == 3)
+	else if (params[2].value.a == 3)
 		priv_key = (char *)target_private_exp;
-	else if (params[2].memref.size == 4)
+	else if (params[2].value.a == 4)
 	{
 		priv_key = pub_key;
 		pub_key = (char *)private_exp;
@@ -456,7 +356,7 @@ TEE_Result RSA_set_key_pair(void *session, uint32_t param_types,
 		EMSG("\nFailed to alloc transient object handle: 0x%x\n", ret);
 		return ret;
 	}
-	DMSG("\n========== Transient object allocated. ==========\n");
+	// DMSG("\n========== Transient object allocated. ==========\n");
 
 	// ret = TEE_GenerateKey(sess->key_handle, key_size, (TEE_Attribute *)NULL, 0);
 	// if (ret != TEE_SUCCESS)
@@ -489,40 +389,40 @@ TEE_Result RSA_set_key_pair(void *session, uint32_t param_types,
 		return ret;
 	}
 
-	DMSG("\n========== Keys generated. ==========\n");
+	// DMSG("\n========== Keys generated. ==========\n");
 
-	/* Export private key */
-	TEE_Result res;
-	uint8_t modu[258];
-	uint32_t modulusLen = 128;
-	uint8_t pubexp[258];
-	uint32_t pubexpLen = 128;
-	uint8_t pvtexp[258];
-	uint32_t pvtexpLen = sizeof(private_exp);
-	res = TEE_GetObjectBufferAttribute(sess->key_handle, TEE_ATTR_RSA_MODULUS, (void *)modu, &modulusLen);
-	if (res != TEE_SUCCESS)
-	{
-		DMSG("TEE_GetObjectBufferAttribute() failed res=0x%X\n", (int)res);
-		return res;
-	}
-	res = TEE_GetObjectBufferAttribute(sess->key_handle, TEE_ATTR_RSA_PUBLIC_EXPONENT, (void *)pubexp, &pubexpLen);
-	if (res != TEE_SUCCESS)
-	{
-		DMSG("TEE_GetObjectBufferAttribute() failed res=0x%X\n", (int)res);
-		return res;
-	}
-	res = TEE_GetObjectBufferAttribute(sess->key_handle, TEE_ATTR_RSA_PRIVATE_EXPONENT, (void *)pvtexp, &pvtexpLen);
-	if (res != TEE_SUCCESS)
-	{
-		DMSG("TEE_GetObjectBufferAttribute() failed res=0x%X\n", (int)res);
-		return res;
-	}
-	DMSG("RSA_MODULUS %d bytes\n", (int)modulusLen);
-	DMSG("RSA_PUBLIC_EXPONENT %d bytes\n", (int)pubexpLen);
-	DMSG("RSA_PRIVATE_EXPONENT %d bytes\n", (int)pvtexpLen);
-	DMSG((char *)modu);
-	DMSG((char *)pubexp);
-	DMSG((char *)pvtexp);
+	// /* Export private key */
+	// TEE_Result res;
+	// uint8_t modu[258];
+	// uint32_t modulusLen = 128;
+	// uint8_t pubexp[258];
+	// uint32_t pubexpLen = 128;
+	// uint8_t pvtexp[258];
+	// uint32_t pvtexpLen = sizeof(private_exp);
+	// res = TEE_GetObjectBufferAttribute(sess->key_handle, TEE_ATTR_RSA_MODULUS, (void *)modu, &modulusLen);
+	// if (res != TEE_SUCCESS)
+	// {
+	// 	DMSG("TEE_GetObjectBufferAttribute() failed res=0x%X\n", (int)res);
+	// 	return res;
+	// }
+	// res = TEE_GetObjectBufferAttribute(sess->key_handle, TEE_ATTR_RSA_PUBLIC_EXPONENT, (void *)pubexp, &pubexpLen);
+	// if (res != TEE_SUCCESS)
+	// {
+	// 	DMSG("TEE_GetObjectBufferAttribute() failed res=0x%X\n", (int)res);
+	// 	return res;
+	// }
+	// res = TEE_GetObjectBufferAttribute(sess->key_handle, TEE_ATTR_RSA_PRIVATE_EXPONENT, (void *)pvtexp, &pvtexpLen);
+	// if (res != TEE_SUCCESS)
+	// {
+	// 	DMSG("TEE_GetObjectBufferAttribute() failed res=0x%X\n", (int)res);
+	// 	return res;
+	// }
+	// DMSG("RSA_MODULUS %d bytes\n", (int)modulusLen);
+	// DMSG("RSA_PUBLIC_EXPONENT %d bytes\n", (int)pubexpLen);
+	// DMSG("RSA_PRIVATE_EXPONENT %d bytes\n", (int)pvtexpLen);
+	// DMSG((char *)modu);
+	// DMSG((char *)pubexp);
+	// DMSG((char *)pvtexp);
 
 	return ret;
 }
@@ -533,7 +433,13 @@ TEE_Result RSA_encrypt(void *session, uint32_t param_types, TEE_Param params[4])
 	uint32_t rsa_alg = TEE_ALG_RSAES_PKCS1_V1_5;
 	struct rsa_session *sess = (struct rsa_session *)session;
 
-	if (check_params(param_types) != TEE_SUCCESS)
+	const uint32_t exp_param_types =
+		TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
+						TEE_PARAM_TYPE_MEMREF_OUTPUT,
+						TEE_PARAM_TYPE_VALUE_INPUT,
+						TEE_PARAM_TYPE_NONE);
+
+	if (param_types != exp_param_types)
 		return TEE_ERROR_BAD_PARAMETERS;
 
 	void *plain_txt = params[0].memref.buffer;
@@ -541,7 +447,25 @@ TEE_Result RSA_encrypt(void *session, uint32_t param_types, TEE_Param params[4])
 	void *cipher = params[1].memref.buffer;
 	size_t cipher_len = params[1].memref.size;
 
-	DMSG("\n========== Preparing encryption operation ==========\n");
+	void *buf = NULL;
+
+	// char keys[32];
+	if (params[2].value.a == 2)
+	{
+		buf = TEE_Malloc(32, 0);
+		generate_random(32, buf);
+		// strcpy(keys, generate_random(32));
+		// DMSG("\nData to encrypt: %s\n", (char *)plain_txt);
+
+		plain_txt = buf;
+		plain_len = 32;
+		// DMSG((char *)plain_len);
+		create_raw_object("aeskey", 6, plain_txt, AES128_KEY_BYTE_SIZE);
+		// DMSG("AES KEY SET!");
+		create_raw_object("hmackey", 7, plain_txt + AES128_KEY_BYTE_SIZE, HMAC_SHA1_KEY_SIZE_BYTES);
+		// DMSG("HMAC KEY SET!");
+	}
+	// DMSG("\n========== Preparing encryption operation ==========\n");
 	ret = prepare_rsa_operation(&sess->op_handle, rsa_alg, TEE_MODE_ENCRYPT, sess->key_handle);
 	if (ret != TEE_SUCCESS)
 	{
@@ -558,7 +482,7 @@ TEE_Result RSA_encrypt(void *session, uint32_t param_types, TEE_Param params[4])
 		goto err;
 	}
 	DMSG("\nEncrypted data: %s\n", (char *)cipher);
-	DMSG("\n========== Encryption successfully ==========\n");
+	// DMSG("\n========== Encryption successfully ==========\n");
 	return ret;
 
 err:
@@ -573,7 +497,13 @@ TEE_Result RSA_decrypt(void *session, uint32_t param_types, TEE_Param params[4])
 	uint32_t rsa_alg = TEE_ALG_RSAES_PKCS1_V1_5;
 	struct rsa_session *sess = (struct rsa_session *)session;
 
-	if (check_params(param_types) != TEE_SUCCESS)
+	const uint32_t exp_param_types =
+		TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
+						TEE_PARAM_TYPE_MEMREF_OUTPUT,
+						TEE_PARAM_TYPE_VALUE_INPUT,
+						TEE_PARAM_TYPE_NONE);
+
+	if (param_types != exp_param_types)
 		return TEE_ERROR_BAD_PARAMETERS;
 
 	void *plain_txt = params[1].memref.buffer;
@@ -583,7 +513,7 @@ TEE_Result RSA_decrypt(void *session, uint32_t param_types, TEE_Param params[4])
 	// void *cipher;
 	// size_t cipher_len = RSA_CIPHER_LEN_1024;
 	// cipher = ((void *)read_raw_object("ctext", 5, RSA_CIPHER_LEN_1024));
-	DMSG("\n========== Preparing decryption operation ==========\n");
+	// DMSG("\n========== Preparing decryption operation ==========\n");
 	// DMSG("\nData to decrypt: %s\n", (char *)cipher);
 	ret = prepare_rsa_operation(&sess->op_handle, rsa_alg, TEE_MODE_DECRYPT, sess->key_handle);
 	if (ret != TEE_SUCCESS)
@@ -602,7 +532,23 @@ TEE_Result RSA_decrypt(void *session, uint32_t param_types, TEE_Param params[4])
 		goto err;
 	}
 	DMSG("\nDecrypted data: %s\n", (char *)plain_txt);
-	DMSG("\n========== Decryption successfully ==========\n");
+
+	// DMSG("\n========== Decryption successfully ==========\n");
+
+	if (params[2].value.a == 2)
+	{
+		void *buf = NULL;
+		buf = TEE_Malloc(32, 0);
+		memcpy(buf, plain_txt, 32);
+		char *pt = buf;
+		create_raw_object("aeskey", 6, pt, AES128_KEY_BYTE_SIZE);
+		// DMSG("AES KEY SET!");
+		create_raw_object("hmackey", 7, pt + AES128_KEY_BYTE_SIZE, HMAC_SHA1_KEY_SIZE_BYTES);
+		// DMSG("HMAC KEY SET!");
+	}
+	// create_raw_object("aeskey", 6, plain_txt, AES128_KEY_BYTE_SIZE);
+	// DMSG("AES KEY SET!");
+	// create_raw_object("hmackey", 7, plain_txt + AES128_KEY_BYTE_SIZE, HMAC_SHA1_KEY_SIZE_BYTES);
 	return ret;
 
 err:
@@ -687,7 +633,7 @@ static TEE_Result alloc_resources(void *session, uint32_t param_types,
 	char *key;
 
 	/* Get ciphering context from session ID */
-	DMSG("Session %p: get ciphering resources", session);
+	// DMSG("Session %p: get ciphering resources", session);
 	sess = (struct aes_cipher *)session;
 
 	/* Safely get the invocation parameters */
@@ -797,7 +743,7 @@ static TEE_Result set_aes_key(void *session, uint32_t param_types,
 							  TEE_Param params[4])
 {
 	const uint32_t exp_param_types =
-		TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
+		TEE_PARAM_TYPES(TEE_PARAM_TYPE_NONE,
 						TEE_PARAM_TYPE_NONE,
 						TEE_PARAM_TYPE_NONE,
 						TEE_PARAM_TYPE_NONE);
@@ -808,7 +754,7 @@ static TEE_Result set_aes_key(void *session, uint32_t param_types,
 	char *key;
 
 	/* Get ciphering context from session ID */
-	DMSG("Session %p: load key material", session);
+	// DMSG("Session %p: load key material", session);
 	sess = (struct aes_cipher *)session;
 
 	/* Safely get the invocation parameters */
@@ -817,9 +763,10 @@ static TEE_Result set_aes_key(void *session, uint32_t param_types,
 
 	// key = params[0].memref.buffer;
 	// key_sz = params[0].memref.size;
-	strcpy(key, read_raw_object("aeskey", 6, 16));
-	if (strlen(key) != 16)
-		return TEE_ERROR_BAD_PARAMETERS;
+	memcpy(key, read_raw_object("aeskey", 6, 16), 16);
+	// DMSG(key);
+	// if (strlen(key) != 16)
+	// return TEE_ERROR_BAD_PARAMETERS;
 	key_sz = 16;
 	if (key_sz != sess->key_size)
 	{
@@ -873,24 +820,35 @@ static TEE_Result reset_aes_iv(void *session, uint32_t param_types,
 {
 	const uint32_t exp_param_types =
 		TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
-						TEE_PARAM_TYPE_NONE,
-						TEE_PARAM_TYPE_NONE,
+						TEE_PARAM_TYPE_VALUE_INPUT,
+						TEE_PARAM_TYPE_MEMREF_OUTPUT,
 						TEE_PARAM_TYPE_NONE);
-	struct aes_cipher *sess;
-	size_t iv_sz;
-	char *iv;
-
-	/* Get ciphering context from session ID */
-	DMSG("Session %p: reset initial vector", session);
-	sess = (struct aes_cipher *)session;
-
 	/* Safely get the invocation parameters */
 	if (param_types != exp_param_types)
 		return TEE_ERROR_BAD_PARAMETERS;
 
-	iv = params[0].memref.buffer;
-	iv_sz = params[0].memref.size;
+	struct aes_cipher *sess;
+	size_t iv_sz;
+	char *iv;
+	void *buf = NULL;
+	/* Get ciphering context from session ID */
+	// DMSG("Session %p: reset initial vector", session);
+	sess = (struct aes_cipher *)session;
 
+	if (params[1].value.a == 1)
+	{
+		buf = TEE_Malloc(16, 0);
+		generate_random(16, buf);
+		iv = buf;
+		iv_sz = AES128_KEY_BYTE_SIZE;
+		memcpy(params[2].memref.buffer, iv, 16);
+	}
+	else
+	{
+		iv = params[0].memref.buffer;
+		iv_sz = params[0].memref.size;
+		memcpy(params[2].memref.buffer, iv, 16);
+	}
 	/*
 	 * Init cipher operation with the initialization vector.
 	 */
@@ -914,7 +872,7 @@ static TEE_Result cipher_buffer(void *session, uint32_t param_types,
 	struct aes_cipher *sess;
 
 	/* Get ciphering context from session ID */
-	DMSG("Session %p: cipher buffer", session);
+	// DMSG("Session %p: cipher buffer", session);
 	sess = (struct aes_cipher *)session;
 
 	/* Safely get the invocation parameters */
@@ -959,8 +917,8 @@ TEE_Result print_passed(void *session, uint32_t param_types, TEE_Param params[4]
 
 	void *plain_txt = params[0].memref.buffer;
 	size_t plain_len = params[0].memref.size;
-	// void *cipher = params[1].memref.buffer;
-	// size_t cipher_len = params[1].memref.size;
+	void *cipher = params[1].memref.buffer;
+	size_t cipher_len = params[1].memref.size;
 
 	DMSG("\nReceived Data: %s\n", (char *)plain_txt);
 
@@ -1054,8 +1012,8 @@ TEE_Result TA_InvokeCommandEntryPoint(void *session_id,
 		return reset_aes_iv(session_id, parameters_type, params);
 	case TA_AES_CMD_CIPHER:
 		return cipher_buffer(session_id, parameters_type, params);
-	case TA_SECURE_STORAGE_CMD_WRITE_RAW:
-		return create_raw_object(parameters_type, params);
+	// case TA_SECURE_STORAGE_CMD_WRITE_RAW:
+	// 	return create_raw_object(parameters_type, params);
 	case TA_RSA_CMD_GENKEYS:
 		return RSA_set_key_pair(session_id, parameters_type, params);
 	case TA_RSA_CMD_ENCRYPT:

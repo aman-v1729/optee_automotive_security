@@ -65,25 +65,17 @@ void prepare_op(TEEC_Operation *op, char *in, size_t in_sz, char *out, size_t ou
 	op->params[1].tmpref.size = out_sz;
 }
 
-// char hashed[64];
-
 void send_to_tee(struct ta_attrs *ta, char *in, size_t in_sz, char *out, size_t out_sz, uint32_t mode)
 {
 	TEEC_Operation op;
 	uint32_t origin;
 	TEEC_Result res;
-	// printf("out : %s\n", out);
 
 	prepare_op(&op, in, in_sz, out, out_sz);
-	// printf("out2 : %s\n", out);
 
 	res = TEEC_InvokeCommand(&ta->sess, mode, &op, &origin);
 	if (res != TEEC_SUCCESS)
 		errx(1, "\nFAIL\n", res, origin);
-	// printf("Received from TEE: %s\n", (char *)op.params[1].tmpref.buffer);
-	// char *ret;
-	// ret = (char *)op.params[1].tmpref.buffer;
-	// strcpy(hashed, ret);
 }
 
 void rsa_set_keys(struct ta_attrs *ta, char *pub_key, size_t pub_key_sz, char *modulus, size_t modulus_sz, int priv)
@@ -94,29 +86,36 @@ void rsa_set_keys(struct ta_attrs *ta, char *pub_key, size_t pub_key_sz, char *m
 
 	memset(&op, 0, sizeof(op));
 	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
-									 TEEC_MEMREF_TEMP_INPUT, TEEC_MEMREF_TEMP_INPUT, TEEC_NONE);
+									 TEEC_MEMREF_TEMP_INPUT, TEEC_VALUE_INPUT, TEEC_NONE);
 
 	op.params[0].tmpref.buffer = pub_key;
 	op.params[0].tmpref.size = pub_key_sz;
 	op.params[1].tmpref.buffer = modulus;
 	op.params[1].tmpref.size = modulus_sz;
-	char *gg = "g";
-	op.params[2].tmpref.buffer = gg;
-	op.params[2].tmpref.size = priv;
+	op.params[2].value.a = priv;
 	res = TEEC_InvokeCommand(&ta->sess, TA_RSA_CMD_GENKEYS, &op, &origin);
 	if (res != TEEC_SUCCESS)
 		errx(1, "\nTEEC_InvokeCommand(TA_RSA_CMD_GENKEYS) failed %#x\n", res);
 	// printf("\n=========== Keys set. ==========\n");
 }
 
-void rsa_encrypt(struct ta_attrs *ta, char *in, size_t in_sz, char *out, size_t out_sz)
+void rsa_encrypt(struct ta_attrs *ta, char *in, size_t in_sz, char *out, size_t out_sz, int mode)
 {
 	TEEC_Operation op;
 	uint32_t origin;
 	TEEC_Result res;
 	// printf("\n============ RSA ENCRYPT CA SIDE ============\n");
-	prepare_op(&op, in, in_sz, out, out_sz);
+	// prepare_op(&op, in, in_sz, out, out_sz);
+	memset(&op, 0, sizeof(op));
 
+	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
+									 TEEC_MEMREF_TEMP_OUTPUT,
+									 TEEC_VALUE_INPUT, TEEC_NONE);
+	op.params[0].tmpref.buffer = (void *)in;
+	op.params[0].tmpref.size = in_sz;
+	op.params[1].tmpref.buffer = (void *)out;
+	op.params[1].tmpref.size = out_sz;
+	op.params[2].value.a = mode;
 	res = TEEC_InvokeCommand(&ta->sess, TA_RSA_CMD_ENCRYPT,
 							 &op, &origin);
 	if (res != TEEC_SUCCESS)
@@ -125,13 +124,23 @@ void rsa_encrypt(struct ta_attrs *ta, char *in, size_t in_sz, char *out, size_t 
 	// printf("\nThe text sent was encrypted: %s\n", out);
 }
 
-void rsa_decrypt(struct ta_attrs *ta, char *in, size_t in_sz, char *out, size_t out_sz)
+void rsa_decrypt(struct ta_attrs *ta, char *in, size_t in_sz, char *out, size_t out_sz, int mode)
 {
 	TEEC_Operation op;
 	uint32_t origin;
 	TEEC_Result res;
 	// printf("\n============ RSA DECRYPT CA SIDE ============\n");
-	prepare_op(&op, in, in_sz, out, out_sz);
+	// prepare_op(&op, in, in_sz, out, out_sz);
+	memset(&op, 0, sizeof(op));
+	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
+									 TEEC_MEMREF_TEMP_OUTPUT,
+									 TEEC_VALUE_INPUT, TEEC_NONE);
+
+	op.params[0].tmpref.buffer = (void *)in;
+	op.params[0].tmpref.size = in_sz;
+	op.params[1].tmpref.buffer = (void *)out;
+	op.params[1].tmpref.size = out_sz;
+	op.params[2].value.a = mode;
 
 	res = TEEC_InvokeCommand(&ta->sess, TA_RSA_CMD_DECRYPT, &op, &origin);
 	if (res != TEEC_SUCCESS)
@@ -139,8 +148,6 @@ void rsa_decrypt(struct ta_attrs *ta, char *in, size_t in_sz, char *out, size_t 
 			 res, origin);
 	// printf("\nThe text sent was decrypted: %s\n", (char *)op.params[1].tmpref.buffer);
 }
-
-////////////////////////////////////////////////////////////////////////////
 
 void prepare_aes(struct ta_attrs *ctx, int encode)
 {
@@ -165,18 +172,18 @@ void prepare_aes(struct ta_attrs *ctx, int encode)
 			 res, origin);
 }
 
-void set_key(struct ta_attrs *ctx, char *key, size_t key_sz)
+void set_key(struct ta_attrs *ctx) // , char *key, size_t key_sz)
 {
 	TEEC_Operation op;
 	uint32_t origin;
 	TEEC_Result res;
 
 	memset(&op, 0, sizeof(op));
-	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
+	op.paramTypes = TEEC_PARAM_TYPES(TEEC_NONE,
 									 TEEC_NONE, TEEC_NONE, TEEC_NONE);
 
-	op.params[0].tmpref.buffer = key;
-	op.params[0].tmpref.size = key_sz;
+	// op.params[0].tmpref.buffer = key;
+	// op.params[0].tmpref.size = key_sz;
 
 	res = TEEC_InvokeCommand(&ctx->sess, TA_AES_CMD_SET_KEY,
 							 &op, &origin);
@@ -185,7 +192,7 @@ void set_key(struct ta_attrs *ctx, char *key, size_t key_sz)
 			 res, origin);
 }
 
-void set_iv(struct ta_attrs *ctx, char *iv, size_t iv_sz)
+void set_iv(struct ta_attrs *ctx, char *iv_in, char *iv_out, size_t iv_sz, int mode)
 {
 	TEEC_Operation op;
 	uint32_t origin;
@@ -193,9 +200,12 @@ void set_iv(struct ta_attrs *ctx, char *iv, size_t iv_sz)
 
 	memset(&op, 0, sizeof(op));
 	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
-									 TEEC_NONE, TEEC_NONE, TEEC_NONE);
-	op.params[0].tmpref.buffer = iv;
+									 TEEC_VALUE_INPUT, TEEC_MEMREF_TEMP_OUTPUT, TEEC_NONE);
+	op.params[0].tmpref.buffer = iv_in;
 	op.params[0].tmpref.size = iv_sz;
+	op.params[1].value.a = mode;
+	op.params[2].tmpref.buffer = iv_out;
+	op.params[2].tmpref.size = iv_sz;
 
 	res = TEEC_InvokeCommand(&ctx->sess, TA_AES_CMD_SET_IV,
 							 &op, &origin);
@@ -247,7 +257,6 @@ void get_hmac(struct ta_attrs *ctx, char *in, size_t in_sz, char *out, size_t ou
 		errx(1, "TEEC_InvokeCommand(CIPHER) failed 0x%x origin 0x%x",
 			 res, origin);
 }
-////////////////////////////////////////////////////////////////////////////////
 
 TEEC_Result read_secure_object(struct ta_attrs *ctx, char *id,
 							   char *data, size_t data_len)
@@ -284,43 +293,6 @@ TEEC_Result read_secure_object(struct ta_attrs *ctx, char *id,
 	return res;
 }
 
-TEEC_Result write_secure_object(struct ta_attrs *ctx, char *id,
-								char *data, size_t data_len)
-{
-	TEEC_Operation op;
-	uint32_t origin;
-	TEEC_Result res;
-	size_t id_len = strlen(id);
-
-	memset(&op, 0, sizeof(op));
-	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
-									 TEEC_MEMREF_TEMP_INPUT,
-									 TEEC_NONE, TEEC_NONE);
-
-	op.params[0].tmpref.buffer = id;
-	op.params[0].tmpref.size = id_len;
-
-	op.params[1].tmpref.buffer = data;
-
-	op.params[1].tmpref.size = data_len;
-
-	res = TEEC_InvokeCommand(&ctx->sess,
-							 TA_SECURE_STORAGE_CMD_WRITE_RAW,
-							 &op, &origin);
-	if (res != TEEC_SUCCESS)
-		printf("Command WRITE_RAW failed: 0x%x / %u\n", res, origin);
-
-	switch (res)
-	{
-	case TEEC_SUCCESS:
-		break;
-	default:
-		printf("Command WRITE_RAW failed: 0x%x / %u\n", res, origin);
-	}
-
-	return res;
-}
-
 int main(int argc, char *argv[])
 {
 	struct ta_attrs ta;
@@ -341,20 +313,16 @@ int main(int argc, char *argv[])
 		char *hash;
 		if (argc >= 3 && strcmp(argv[2], "-s") == 0)
 		{
-			/////// Generate AES key and encrypt instead /////////
-			printf("\nType something to be encrypted and decrypted in the TA:\n");
-			fflush(stdin); //setbuf(stdin, NULL);
-			fgets(clear, sizeof(clear), stdin);
-			//////////////////////////////////////////////////////
-
 			rsa_set_keys(&ta, target_public_exp, 128, target_modulus, 128, SET_RSA_KEYS_OTHER);
-			rsa_encrypt(&ta, clear, strlen(clear) + 1, ciph, RSA_CIPHER_LEN_1024);
-			fflush(stdout);
+			rsa_encrypt(&ta, clear, RSA_MAX_PLAIN_LEN_1024, ciph, RSA_CIPHER_LEN_1024, 2);
+
 			rsa_set_keys(&ta, public_exp, 128, modulus, 128, SET_RSA_SIGN_KEYS_SELF);
-			send_to_tee(&ta, ciph, bufferLength, hashed, bufferLength, TA_PLAIN_TEXT);
+			// send_to_tee(&ta, ciph, bufferLength, hashed, bufferLength, TA_PLAIN_TEXT);
 			send_to_tee(&ta, ciph, bufferLength, hashed, bufferLength, TA_SHA256);
 			hash = hashed;
-			rsa_encrypt(&ta, hash, 32, sign, RSA_CIPHER_LEN_1024);
+
+			rsa_encrypt(&ta, hash, 32, sign, RSA_CIPHER_LEN_1024, 1);
+
 			FILE *key_out_file = fopen("key_exchange.txt", "w");
 			FILE *sign_out_file = fopen("sign.txt", "w");
 
@@ -404,24 +372,33 @@ int main(int argc, char *argv[])
 			//////////////
 
 			rsa_set_keys(&ta, public_exp, 128, modulus, 128, SET_RSA_SIGN_KEYS_SELF);
-			send_to_tee(&ta, ciph, RSA_CIPHER_LEN_1024, hashed, bufferLength, TA_PLAIN_TEXT);
+			// send_to_tee(&ta, ciph, RSA_CIPHER_LEN_1024, hashed, bufferLength, TA_PLAIN_TEXT);
 			send_to_tee(&ta, ciph, RSA_CIPHER_LEN_1024, hashed, 64, TA_SHA256);
 
 			fprintf(stdout, "HASH: ");
 			fwrite(hashed, sizeof(char), 32, stdout);
 			fprintf(stdout, "\n");
 			fflush(stdout);
-			rsa_decrypt(&ta, sign, RSA_CIPHER_LEN_1024, sign_verif, RSA_MAX_PLAIN_LEN_1024);
+			rsa_decrypt(&ta, sign, RSA_CIPHER_LEN_1024, sign_verif, RSA_MAX_PLAIN_LEN_1024, 1);
 
 			// fprintf(stdout, "SIGN DEC: %s\n", hashed);
 			fwrite(sign_verif, sizeof(char), 32, stdout);
 			fprintf(stdout, "\n");
 			fflush(stdout);
+
+			if (memcmp(sign_verif, hashed, 32))
+			{
+				printf("Signature verification failed! Tampering detected!\n");
+				return 1;
+			}
+			else
+				printf("Signature verified! Decrypting..\n");
+
 			// rsa_set_keys(&ta, target_public_exp, 128, target_modulus, 128, SET_RSA_MSG_DECRYPT_KEYS);
 			rsa_set_keys(&ta, target_public_exp, 128, target_modulus, 128, SET_RSA_KEYS_OTHER);
 			// printf("\n\n\nenc:%s\n\n\n", ciph);
 			// rsa_decrypt(&ta, ciph, RSA_CIPHER_LEN_1024, decrypted, RSA_MAX_PLAIN_LEN_1024);
-			rsa_decrypt(&ta, ciph, RSA_CIPHER_LEN_1024, decrypted, RSA_MAX_PLAIN_LEN_1024);
+			rsa_decrypt(&ta, ciph, RSA_CIPHER_LEN_1024, decrypted, RSA_MAX_PLAIN_LEN_1024, 2);
 
 			fprintf(stdout, "DECRYPTED: %s\n", decrypted);
 			fprintf(stdout, "\n");
@@ -438,7 +415,8 @@ int main(int argc, char *argv[])
 		FILE *msg_file = fopen("message.txt", "r");
 
 		char key[AES_TEST_KEY_SIZE];
-		char iv[AES_BLOCK_SIZE];
+		char iv_in[AES_BLOCK_SIZE];
+		char iv_out[AES_BLOCK_SIZE];
 		char clear[AES_TEST_BUFFER_SIZE];
 		char ciph[AES_TEST_BUFFER_SIZE];
 		char temp[AES_TEST_BUFFER_SIZE];
@@ -454,52 +432,54 @@ int main(int argc, char *argv[])
 
 		fread(buffer, sizeof(char), numbytes, msg_file);
 		fclose(msg_file);
-		strcpy(msg, buffer);
+		for (int i = 0; i < numbytes; i++)
+			msg[i] = *(buffer + i);
 		free(buffer);
 
-		char aes_key_id[] = "aeskey";
-		char hmac_key_id[] = "hmackey";
 		TEEC_Result res;
 
 		if (argc >= 3 && strcmp(argv[2], "-e") == 0)
 		{
-			strcpy(key, "some Random key1");
-
-			printf("- Create and load object in the TA secure storage\n");
-			res = write_secure_object(&ta, aes_key_id,
-									  key, sizeof(key));
-			if (res != TEEC_SUCCESS)
-				errx(1, "Failed to create an object in the secure storage");
-			strcpy(key, "some Random key5");
-
-			printf("- Create and load object in the TA secure storage\n");
-			res = write_secure_object(&ta, hmac_key_id,
-									  key, sizeof(key));
-			if (res != TEEC_SUCCESS)
-				errx(1, "Failed to create an object in the secure storage");
-
 			printf("Prepare encode operation\n");
 			prepare_aes(&ta, ENCODE);
 
 			printf("Load key in TA\n");
-			strcpy(key, "unused value - filler");
-			set_key(&ta, key, AES_TEST_KEY_SIZE);
+			set_key(&ta); // ,key, AES_TEST_KEY_SIZE);
 
 			printf("Reset ciphering operation in TA (provides the initial vector)\n");
-			strcpy(iv, "Some Random IV12");
-			set_iv(&ta, iv, AES_BLOCK_SIZE);
+			set_iv(&ta, iv_in, iv_out, AES_BLOCK_SIZE, 1);
 
 			printf("Encode buffer from TA\n");
-			strcpy(clear, msg);
+			for (int i = 0; i < numbytes; i++)
+			{
+				clear[i] = msg[i];
+			}
+
 			cipher_buffer(&ta, clear, ciph, numbytes);
 
-			get_hmac(&ta, ciph, numbytes, mac, SHA1_SIZE);
+			fprintf(stdout, "IV: ");
+			fwrite(iv_out, sizeof(char), AES_BLOCK_SIZE, stdout);
+			fprintf(stdout, "\n");
+
+			fprintf(stdout, "ENCRYPTED: ");
+			fwrite(ciph, sizeof(char), numbytes, stdout);
+			fprintf(stdout, "\n");
+
+			for (int i = numbytes - 1; i >= 0; i--)
+			{
+				ciph[i + AES_BLOCK_SIZE] = ciph[i];
+			}
+			for (int i = 0; i < AES_BLOCK_SIZE; i++)
+			{
+				ciph[i] = iv_out[i];
+			}
+			get_hmac(&ta, ciph, numbytes + AES_BLOCK_SIZE, mac, SHA1_SIZE);
 
 			FILE *msg_out_file = fopen("message.txt", "w");
 			FILE *mac_out_file = fopen("mac.txt", "w");
 
 			fprintf(stdout, "ENCRYPTED: ");
-			fwrite(ciph, sizeof(char), numbytes, stdout);
+			fwrite(ciph, sizeof(char), numbytes + AES_BLOCK_SIZE, stdout);
 			fprintf(stdout, "\n");
 			fprintf(stdout, "HMAC: ");
 			fwrite(mac, sizeof(char), SHA1_SIZE, stdout);
@@ -510,7 +490,7 @@ int main(int argc, char *argv[])
 				return 1;
 			}
 
-			fwrite(ciph, sizeof(char), numbytes, msg_out_file);
+			fwrite(ciph, sizeof(char), numbytes + AES_BLOCK_SIZE, msg_out_file);
 			fwrite(mac, sizeof(char), SHA1_SIZE, mac_out_file);
 
 			fclose(msg_out_file);
@@ -524,10 +504,12 @@ int main(int argc, char *argv[])
 			{
 				return 1;
 			}
-
 			fread(&received_mac, sizeof(char), SHA1_SIZE, mac_in_file);
 			fclose(mac_in_file);
-			strcpy(ciph, msg);
+			for (int i = 0; i < numbytes; i++)
+			{
+				ciph[i] = msg[i];
+			}
 			get_hmac(&ta, ciph, numbytes, mac, SHA1_SIZE);
 
 			// fwrite(mac, sizeof(char), SHA1_SIZE, stdout);
@@ -540,19 +522,32 @@ int main(int argc, char *argv[])
 			else
 				printf("MAC verified! Decrypting..\n");
 
+			if (numbytes < 16)
+			{
+				printf("IV missing!\n");
+				return 1;
+			}
+
+			for (int i = 0; i < AES_BLOCK_SIZE; i++)
+			{
+				iv_in[i] = ciph[i];
+			}
+			for (int i = AES_BLOCK_SIZE; i < numbytes; i++)
+			{
+				ciph[i - AES_BLOCK_SIZE] = ciph[i];
+			}
+
 			printf("Prepare decode operation\n");
 			prepare_aes(&ta, DECODE);
 
 			printf("Load key in TA\n");
-			strcpy(key, "unused value - filler");
-			set_key(&ta, key, AES_TEST_KEY_SIZE);
+			set_key(&ta);
 
 			printf("Reset ciphering operation in TA (provides the initial vector)\n");
-			strcpy(iv, "Some Random IV12");
-			set_iv(&ta, iv, AES_BLOCK_SIZE);
+			set_iv(&ta, iv_in, iv_out, AES_BLOCK_SIZE, 0);
 
 			printf("Decode buffer from TA\n");
-			cipher_buffer(&ta, ciph, temp, numbytes);
+			cipher_buffer(&ta, ciph, temp, numbytes - AES_BLOCK_SIZE);
 
 			printf("%s\n\n", temp);
 			// fprintf(stdout, "CIPHER TEXT: ");
