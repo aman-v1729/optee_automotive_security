@@ -24,6 +24,11 @@
 #define TA_AES_MODE_ENCODE 1
 #define TA_AES_MODE_DECODE 0
 
+#define SET_RSA_KEYS_SELF 2
+#define SET_RSA_KEYS_OTHER 3
+#define SET_RSA_SIGN_KEYS_SELF 4
+#define SET_RSA_SIGN_KEYS_OTHER 5
+
 /* The function IDs implemented in this TA */
 #define TA_PLAIN_TEXT 0
 #define TA_AES_CMD_PREPARE 1

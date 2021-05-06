@@ -815,6 +815,7 @@ static TEE_Result reset_aes_iv(void *session, uint32_t param_types,
 /*
  * Process command TA_AES_CMD_CIPHER. API in aes_ta.h
  */
+// }
 static TEE_Result cipher_buffer(void *session, uint32_t param_types,
 								TEE_Param params[4])
 {
@@ -863,7 +864,6 @@ static TEE_Result cipher_buffer(void *session, uint32_t param_types,
 // 	if (param_types != exp_param_types)
 // 		return TEE_ERROR_BAD_PARAMETERS;
 // 	return TEE_SUCCESS;
-// }
 
 TEE_Result print_passed(void *session, uint32_t param_types, TEE_Param params[4])
 {
