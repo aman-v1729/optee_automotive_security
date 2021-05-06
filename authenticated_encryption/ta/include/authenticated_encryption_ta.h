@@ -59,5 +59,6 @@
 #define TA_RSA_CMD_DECRYPT 9
 
 #define TA_SHA256 10
+#define TA_HMAC_SHA1 11
 
 #endif /*TA_AUTHENTICATED_ENCRYPTION_H*/

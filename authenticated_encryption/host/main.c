@@ -10,9 +10,11 @@
 #define RSA_MAX_PLAIN_LEN_1024 86 // (1024/8) - 42 (padding)
 #define RSA_CIPHER_LEN_1024 (RSA_KEY_SIZE / 8)
 
-#define AES_TEST_BUFFER_SIZE 16
+#define AES_TEST_BUFFER_SIZE 4096
 #define AES_TEST_KEY_SIZE 16
 #define AES_BLOCK_SIZE 16
+
+#define SHA1_SIZE 20
 
 #define DECODE 0
 #define ENCODE 1
@@ -223,6 +225,28 @@ void cipher_buffer(struct ta_attrs *ctx, char *in, char *out, size_t sz)
 		errx(1, "TEEC_InvokeCommand(CIPHER) failed 0x%x origin 0x%x",
 			 res, origin);
 }
+
+void get_hmac(struct ta_attrs *ctx, char *in, size_t in_sz, char *out, size_t out_sz)
+{
+	TEEC_Operation op;
+	uint32_t origin;
+	TEEC_Result res;
+
+	memset(&op, 0, sizeof(op));
+	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
+									 TEEC_MEMREF_TEMP_OUTPUT,
+									 TEEC_NONE, TEEC_NONE);
+	op.params[0].tmpref.buffer = in;
+	op.params[0].tmpref.size = in_sz;
+	op.params[1].tmpref.buffer = out;
+	op.params[1].tmpref.size = out_sz;
+
+	res = TEEC_InvokeCommand(&ctx->sess, TA_HMAC_SHA1,
+							 &op, &origin);
+	if (res != TEEC_SUCCESS)
+		errx(1, "TEEC_InvokeCommand(CIPHER) failed 0x%x origin 0x%x",
+			 res, origin);
+}
 ////////////////////////////////////////////////////////////////////////////////
 
 TEEC_Result read_secure_object(struct ta_attrs *ctx, char *id,
@@ -334,13 +358,6 @@ int main(int argc, char *argv[])
 			FILE *key_out_file = fopen("key_exchange.txt", "w");
 			FILE *sign_out_file = fopen("sign.txt", "w");
 
-			// test for files not existing.
-			if (key_out_file == NULL || sign_out_file == NULL)
-			{
-				fprintf(stdout, "CIPHER TEXT: %s\n", ciph);
-				fprintf(stdout, "SIGNATURE: %s\n", sign);
-				return 1;
-			}
 			fprintf(stdout, "CIPHER TEXT: ");
 			fwrite(ciph, sizeof(char), RSA_CIPHER_LEN_1024, stdout);
 			fprintf(stdout, "\n");
@@ -349,12 +366,17 @@ int main(int argc, char *argv[])
 			fwrite(sign, sizeof(char), RSA_CIPHER_LEN_1024, stdout);
 			fprintf(stdout, "\n");
 			fflush(stdout);
+
+			if (key_out_file == NULL || sign_out_file == NULL)
+			{
+				return 1;
+			}
+
 			fwrite(ciph, sizeof(char), RSA_CIPHER_LEN_1024, key_out_file);
 			fwrite(sign, sizeof(char), RSA_CIPHER_LEN_1024, sign_out_file);
+
 			fclose(key_out_file);
 			fclose(sign_out_file);
-			// fprintf(key_out_file, "%s", ciph);
-			// fprintf(sign_out_file, "%s", sign);
 		}
 		else if (argc >= 3 && strcmp(argv[2], "-t") == 0)
 		{
@@ -368,37 +390,6 @@ int main(int argc, char *argv[])
 			fread(&ciph, sizeof(char), RSA_CIPHER_LEN_1024, key_in_file);
 			fread(&sign, sizeof(char), RSA_CIPHER_LEN_1024, sign_in_file);
 
-			// fseek(sign_in_file, 0L, SEEK_END);
-			// numbytes = ftell(sign_in_file);
-			// printf("\n\n\n\n\n\n\nNUMBYTES: %d\n\n\n\n\n\n\n\n\n", numbytes);
-			// fseek(sign_in_file, 0L, SEEK_SET);
-
-			// buffer = (char *)calloc(numbytes, sizeof(char));
-
-			// if (buffer == NULL)
-			// 	return 1;
-
-			// fread(buffer, sizeof(char), numbytes, sign_in_file);
-			// fclose(sign_in_file);
-
-			// strcpy(sign, buffer);
-			// free(buffer);
-
-			// fseek(key_in_file, 0L, SEEK_END);
-			// numbytes = ftell(key_in_file);
-			// printf("\n\n\n\n\n\n\nNUMBYTES: %d\n\n\n\n\n\n\n\n\n", numbytes);
-			// fseek(key_in_file, 0L, SEEK_SET);
-
-			// buffer = (char *)calloc(numbytes, sizeof(char));
-
-			// if (buffer == NULL)
-			// 	return 1;
-
-			// fread(buffer, sizeof(char), numbytes, key_in_file);
-			// fclose(key_in_file);
-
-			// strcpy(ciph, buffer);
-			// free(buffer);
 			fprintf(stdout, "CIPHER TEXT: ");
 			fwrite(ciph, sizeof(char), RSA_CIPHER_LEN_1024, stdout);
 			fprintf(stdout, "\n");
@@ -441,112 +432,134 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (argc >= 2 && strcmp(argv[1], "m") == 0)
+	if (argc >= 2 && strcmp(argv[1], "-m") == 0)
 	{
-		char msg[bufferLength];
-		char out[bufferLength];
-		FILE *infile;
-		infile = fopen("message.txt", "r");
-
-		if (infile == NULL)
-			return 1;
-
-		fseek(infile, 0L, SEEK_END);
-		numbytes = ftell(infile);
-		printf("\n\n\n\n\n\n\nNUMBYTES: %d\n\n\n\n\n\n\n\n\n", numbytes);
-		fseek(infile, 0L, SEEK_SET);
-
-		buffer = (char *)calloc(numbytes, sizeof(char));
-
-		if (buffer == NULL)
-			return 1;
-
-		fread(buffer, sizeof(char), numbytes, infile);
-		fclose(infile);
-
-		strcpy(msg, buffer);
-		free(buffer);
-
-		send_to_tee(&ta, msg, bufferLength, out, bufferLength, TA_PLAIN_TEXT);
+		char msg[AES_TEST_BUFFER_SIZE];
+		FILE *msg_file = fopen("message.txt", "r");
 
 		char key[AES_TEST_KEY_SIZE];
 		char iv[AES_BLOCK_SIZE];
 		char clear[AES_TEST_BUFFER_SIZE];
 		char ciph[AES_TEST_BUFFER_SIZE];
 		char temp[AES_TEST_BUFFER_SIZE];
+		char mac[20];
 
-		char key_id[] = "aeskey";
-		char read_data[AES_TEST_BUFFER_SIZE];
+		fseek(msg_file, 0L, SEEK_END);
+		numbytes = ftell(msg_file);
+		fseek(msg_file, 0L, SEEK_SET);
+		buffer = (char *)calloc(numbytes, sizeof(char));
+
+		if (buffer == NULL)
+			return 1;
+
+		fread(buffer, sizeof(char), numbytes, msg_file);
+		fclose(msg_file);
+		strcpy(msg, buffer);
+		free(buffer);
+
+		char aes_key_id[] = "aeskey";
+		char hmac_key_id[] = "hmackey";
 		TEEC_Result res;
 
-		strcpy(key, "some Random key1");
+		if (argc >= 3 && strcmp(argv[2], "-e") == 0)
+		{
+			strcpy(key, "some Random key1");
 
-		printf("- Create and load object in the TA secure storage\n");
-		res = write_secure_object(&ta, key_id,
-								  key, sizeof(key));
-		if (res != TEEC_SUCCESS)
-			errx(1, "Failed to create an object in the secure storage");
+			printf("- Create and load object in the TA secure storage\n");
+			res = write_secure_object(&ta, aes_key_id,
+									  key, sizeof(key));
+			if (res != TEEC_SUCCESS)
+				errx(1, "Failed to create an object in the secure storage");
+			strcpy(key, "some Random key5");
 
-		// printf("- Read back: \n");
-		// res = read_secure_object(&ta, key_id,
-		// 						 read_data, sizeof(read_data));
-		// if (res != TEEC_SUCCESS)
-		// 	errx(1, "Failed to read an object from the secure storage");
+			printf("- Create and load object in the TA secure storage\n");
+			res = write_secure_object(&ta, hmac_key_id,
+									  key, sizeof(key));
+			if (res != TEEC_SUCCESS)
+				errx(1, "Failed to create an object in the secure storage");
 
-		// printf("%s\n", read_data);
+			printf("Prepare encode operation\n");
+			prepare_aes(&ta, ENCODE);
 
-		printf("Prepare encode operation\n");
-		prepare_aes(&ta, ENCODE);
+			printf("Load key in TA\n");
+			strcpy(key, "unused value - filler");
+			set_key(&ta, key, AES_TEST_KEY_SIZE);
 
-		printf("Load key in TA\n");
-		// memset(key, 0xa5, sizeof(key)); /* Load some dummy value */
-		strcpy(key, "unused value - filler");
-		set_key(&ta, key, AES_TEST_KEY_SIZE);
+			printf("Reset ciphering operation in TA (provides the initial vector)\n");
+			strcpy(iv, "Some Random IV12");
+			set_iv(&ta, iv, AES_BLOCK_SIZE);
 
-		printf("Reset ciphering operation in TA (provides the initial vector)\n");
-		// memset(iv, 0, sizeof(iv)); /* Load some dummy value */
-		strcpy(iv, "Some Random IV12");
-		set_iv(&ta, iv, AES_BLOCK_SIZE);
+			printf("Encode buffer from TA\n");
+			strcpy(clear, msg);
+			cipher_buffer(&ta, clear, ciph, numbytes);
 
-		printf("Encode buffer from TA\n");
-		// memset(clear, 0x5a, sizeof(clear)); /* Load some dummy value */
-		strcpy(clear, msg);
-		printf("%s\n\n\n\n", clear);
-		fflush(stdout);
-		cipher_buffer(&ta, clear, ciph, AES_TEST_BUFFER_SIZE);
-		printf("%s\n\n\n\n", clear);
-		fflush(stdout);
-		printf("%s\n\n\n\n", ciph);
-		fflush(stdout);
+			get_hmac(&ta, ciph, numbytes, mac, SHA1_SIZE);
 
-		printf("Prepare decode operation\n");
-		prepare_aes(&ta, DECODE);
+			FILE *msg_out_file = fopen("message.txt", "w");
+			FILE *mac_out_file = fopen("mac.txt", "w");
 
-		printf("Load key in TA\n");
-		// memset(key, 0xa5, sizeof(key)); /* Load some dummy value */
-		strcpy(key, "unused value - filler");
-		set_key(&ta, key, AES_TEST_KEY_SIZE);
+			fprintf(stdout, "ENCRYPTED: ");
+			fwrite(ciph, sizeof(char), numbytes, stdout);
+			fprintf(stdout, "\n");
+			fprintf(stdout, "HMAC: ");
+			fwrite(mac, sizeof(char), SHA1_SIZE, stdout);
+			fprintf(stdout, "\n");
 
-		printf("Reset ciphering operation in TA (provides the initial vector)\n");
-		// memset(iv, 0, sizeof(iv)); /* Load some dummy value */
-		strcpy(iv, "Some Random IV12");
-		set_iv(&ta, iv, AES_BLOCK_SIZE);
+			if (msg_out_file == NULL)
+			{
+				return 1;
+			}
 
-		printf("Decode buffer from TA\n");
-		cipher_buffer(&ta, ciph, temp, AES_TEST_BUFFER_SIZE);
+			fwrite(ciph, sizeof(char), numbytes, msg_out_file);
+			fwrite(mac, sizeof(char), SHA1_SIZE, mac_out_file);
 
-		printf("%s\n\n\n\n", clear);
-		fflush(stdout);
-		printf("%s\n\n\n\n", ciph);
-		fflush(stdout);
-		printf("%s\n\n\n\n", temp);
-		fflush(stdout);
+			fclose(msg_out_file);
+			fclose(mac_out_file);
+		}
+		if (argc >= 3 && strcmp(argv[2], "-d") == 0)
+		{
+			char received_mac[SHA1_SIZE];
+			FILE *mac_in_file = fopen("mac.txt", "r");
+			if (mac_in_file == NULL)
+			{
+				return 1;
+			}
 
-		/* Check decoded is the clear content */
-		if (memcmp(msg, temp, AES_TEST_BUFFER_SIZE))
-			printf("Clear text and decoded text differ => ERROR\n");
-		else
-			printf("Clear text and decoded text match\n");
+			fread(&received_mac, sizeof(char), SHA1_SIZE, mac_in_file);
+			fclose(mac_in_file);
+			strcpy(ciph, msg);
+			get_hmac(&ta, ciph, numbytes, mac, SHA1_SIZE);
+
+			// fwrite(mac, sizeof(char), SHA1_SIZE, stdout);
+
+			if (memcmp(received_mac, mac, SHA1_SIZE))
+			{
+				printf("MAC did not match! Tampering detected!\n");
+				return 1;
+			}
+			else
+				printf("MAC verified! Decrypting..\n");
+
+			printf("Prepare decode operation\n");
+			prepare_aes(&ta, DECODE);
+
+			printf("Load key in TA\n");
+			strcpy(key, "unused value - filler");
+			set_key(&ta, key, AES_TEST_KEY_SIZE);
+
+			printf("Reset ciphering operation in TA (provides the initial vector)\n");
+			strcpy(iv, "Some Random IV12");
+			set_iv(&ta, iv, AES_BLOCK_SIZE);
+
+			printf("Decode buffer from TA\n");
+			cipher_buffer(&ta, ciph, temp, numbytes);
+
+			printf("%s\n\n", temp);
+			// fprintf(stdout, "CIPHER TEXT: ");
+			// fwrite(temp, sizeof(char), b, stdout);
+			// fprintf(stdout, "\n");
+			fflush(stdout);
+		}
 	}
 
 	terminate_tee_session(&ta);

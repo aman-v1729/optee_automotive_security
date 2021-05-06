@@ -20,6 +20,20 @@
 uint8_t private_exp[] = "\x67\xa2\xf5\x13\xad\x72\x5c\x2a\x26\x7e\x4c\xc6\xd9\x48\xe1\x9f\xfc\x2b\xc8\xf2\xf3\xe3\xb9\xde\x5b\xa4\xae\x20\x3f\x50\x6c\xb1\xfe\x9f\xe8\x84\x3e\x13\x01\xc7\xe5\x86\xf0\x55\xcd\xe9\x49\x7f\xdc\x55\xa5\x2d\x18\x43\xa9\xe8\x18\x11\x0c\xb7\x5d\xbf\xc3\x4c\x32\x3f\xc9\x85\x03\xd7\xa8\x47\xd4\xec\xd3\x37\xbb\x8a\xfc\xf8\xb8\x79\x0f\x36\x19\xbf\xbb\xf7\xd2\x57\x7d\x52\x8f\x57\x77\x84\x0b\xb8\x1f\xbc\x5f\xa6\x46\x1b\xf9\x4b\xaa\xf1\x5b\xc1\xe1\xb6\xdc\x16\x96\x2e\x91\xa3\x06\x1e\x20\xbf\xd0\x3a\xd6\x6f\x3d\xcd";
 uint8_t target_private_exp[] = "\x67\x6b\x2f\xb0\x4c\xae\xbe\x33\x11\x27\xc1\x81\x86\x3b\xb3\xd3\x90\xc6\x77\xfd\x70\xd4\x03\xe8\xa7\xe4\x55\x05\x62\xb0\x75\xcd\xb3\xb8\x77\x85\x0a\xef\x71\x7d\xa6\xce\x97\x75\xa9\xe2\x11\x79\x2d\x2f\x73\xae\x24\x7b\x7c\x18\xce\x80\x0f\xbd\xc1\xd6\x3a\x6d\xef\xac\x6d\x83\xe8\xe3\xca\x01\x42\x17\xc5\x3e\x94\xde\xf0\xd2\xcf\xbd\xb8\x29\xd3\x5b\xe0\xad\x46\x1c\x9e\xa7\x7e\xe0\x0c\x55\xcb\xdc\x2d\x5b\x2c\x3b\xdd\xfb\xa5\x3e\x4c\xd9\x52\x90\x3a\xee\xc3\x44\x74\x6f\x3d\x44\xdf\x3c\x76\x9a\x48\x71\xb4\xe4\x16\xd1";
 
+TEE_Result check_params(uint32_t param_types)
+{
+	const uint32_t exp_param_types =
+		TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
+						TEE_PARAM_TYPE_MEMREF_OUTPUT,
+						TEE_PARAM_TYPE_NONE,
+						TEE_PARAM_TYPE_NONE);
+
+	/* Safely get the invocation parameters */
+	if (param_types != exp_param_types)
+		return TEE_ERROR_BAD_PARAMETERS;
+	return TEE_SUCCESS;
+}
+
 int mystrlen(char *p)
 {
 	int c = 0;
@@ -61,6 +75,7 @@ TEE_Result ta_entry_sha256(uint32_t param_types, TEE_Param params[4])
 	DMSG("okay!");
 	return TEE_SUCCESS;
 }
+
 TEE_Result hash_SHA256(void *session_id, uint32_t param_types, TEE_Param params[4])
 {
 	// if (check_params(param_types) != TEE_SUCCESS)
@@ -276,6 +291,92 @@ exit:
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
+static TEE_Result hmac_sha1(void *session, uint32_t param_types,
+							TEE_Param params[4])
+{
+
+	// const uint8_t *in, const size_t inlen,
+	// 	uint8_t *out, uint32_t *outlen;
+	check_params(param_types);
+
+	unsigned char *key;
+	size_t keylen = 16;
+	strcpy(key, read_raw_object("hmackey", 7, keylen));
+
+	TEE_Attribute attr = {0};
+	TEE_ObjectHandle key_handle = TEE_HANDLE_NULL;
+	TEE_OperationHandle op_handle = TEE_HANDLE_NULL;
+	TEE_Result res = TEE_SUCCESS;
+
+	// if (keylen < MIN_KEY_SIZE || keylen > MAX_KEY_SIZE)
+	// 	return TEE_ERROR_BAD_PARAMETERS;
+
+	// if (!in || !out || !outlen)
+	// 	return TEE_ERROR_BAD_PARAMETERS;
+
+	/*
+	 * 1. Allocate cryptographic (operation) handle for the HMAC operation.
+	 *    Note that the expected size here is in bits (and therefore times
+	 *    8)!
+	 */
+	res = TEE_AllocateOperation(&op_handle, TEE_ALG_HMAC_SHA1, TEE_MODE_MAC,
+								keylen * 8);
+	if (res != TEE_SUCCESS)
+	{
+		EMSG("0x%08x", res);
+		goto exit;
+	}
+
+	/*
+	 * 2. Allocate a container (key handle) for the HMAC attributes. Note
+	 *    that the expected size here is in bits (and therefore times 8)!
+	 */
+	res = TEE_AllocateTransientObject(TEE_TYPE_HMAC_SHA1, keylen * 8,
+									  &key_handle);
+	if (res != TEE_SUCCESS)
+	{
+		EMSG("0x%08x", res);
+		goto exit;
+	}
+
+	/*
+	 * 3. Initialize the attributes, i.e., point to the actual HMAC key.
+	 *    Here, the expected size is in bytes and not bits as above!
+	 */
+	TEE_InitRefAttribute(&attr, TEE_ATTR_SECRET_VALUE, key, keylen);
+
+	/* 4. Populate/assign the attributes with the key object */
+	res = TEE_PopulateTransientObject(key_handle, &attr, 1);
+	if (res != TEE_SUCCESS)
+	{
+		EMSG("0x%08x", res);
+		goto exit;
+	}
+
+	/* 5. Associate the key (object) with the operation */
+	res = TEE_SetOperationKey(op_handle, key_handle);
+	if (res != TEE_SUCCESS)
+	{
+		EMSG("0x%08x", res);
+		goto exit;
+	}
+
+	/* 6. Do the HMAC operations */
+	TEE_MACInit(op_handle, NULL, 0);
+	TEE_MACUpdate(op_handle, params[0].memref.buffer, params[0].memref.size);
+
+	res = TEE_MACComputeFinal(op_handle, NULL, 0, params[1].memref.buffer, &params[1].memref.size);
+exit:
+	if (op_handle != TEE_HANDLE_NULL)
+		TEE_FreeOperation(op_handle);
+
+	/* It is OK to call this when key_handle is TEE_HANDLE_NULL */
+	TEE_FreeTransientObject(key_handle);
+
+	return res;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
 
 struct rsa_session
 {
@@ -311,20 +412,6 @@ TEE_Result prepare_rsa_operation(TEE_OperationHandle *handle, uint32_t alg, TEE_
 	DMSG("\n========== Operation key already set. ==========\n");
 
 	return ret;
-}
-
-TEE_Result check_params(uint32_t param_types)
-{
-	const uint32_t exp_param_types =
-		TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
-						TEE_PARAM_TYPE_MEMREF_OUTPUT,
-						TEE_PARAM_TYPE_NONE,
-						TEE_PARAM_TYPE_NONE);
-
-	/* Safely get the invocation parameters */
-	if (param_types != exp_param_types)
-		return TEE_ERROR_BAD_PARAMETERS;
-	return TEE_SUCCESS;
 }
 
 TEE_Result RSA_set_key_pair(void *session, uint32_t param_types,
@@ -981,6 +1068,8 @@ TEE_Result TA_InvokeCommandEntryPoint(void *session_id,
 	case TA_SHA256:
 		hash_SHA256(&session_id, parameters_type, params);
 		break;
+	case TA_HMAC_SHA1:
+		return hmac_sha1(session_id, parameters_type, params);
 	// case TA_SECURE_STORAGE_CMD_READ_RAW:
 	// return read_raw_object(parameters_type, params);
 	default:
