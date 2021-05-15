@@ -43,9 +43,10 @@
 
 #define SHA256_DIGEST_SIZE (256 / 8)
 
-#define SHA256_BLOCK_SIZE  (512 / 8)
+#define SHA256_BLOCK_SIZE (512 / 8)
 
-struct sha256_ctx {
+struct sha256_ctx
+{
 	unsigned int tot_len;
 	unsigned int len;
 	unsigned char block[2 * SHA256_BLOCK_SIZE];
@@ -54,11 +55,11 @@ struct sha256_ctx {
 
 void sha256_init(struct sha256_ctx *ctx);
 void sha256_update(struct sha256_ctx *ctx, const unsigned char *message,
-		   unsigned int len);
+				   unsigned int len);
 void sha256_final(struct sha256_ctx *ctx, unsigned char *digest);
 void sha256(const unsigned char *message, unsigned int len,
-	    unsigned char *digest);
+			unsigned char *digest);
 
 void sha256_transf(struct sha256_ctx *ctx, const unsigned char *message,
-		   unsigned int block_nb);
+				   unsigned int block_nb);
 #endif

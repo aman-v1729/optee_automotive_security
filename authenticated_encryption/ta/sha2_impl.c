@@ -42,54 +42,47 @@
 
 #include "sha2_impl.h"
 
-#define SHFR(x, n)    (x >> n)
-#define ROTR(x, n)   ((x >> n) | (x << ((sizeof(x) << 3) - n)))
-#define ROTL(x, n)   ((x << n) | (x >> ((sizeof(x) << 3) - n)))
-#define CH(x, y, z)  ((x & y) ^ (~x & z))
+#define SHFR(x, n) (x >> n)
+#define ROTR(x, n) ((x >> n) | (x << ((sizeof(x) << 3) - n)))
+#define ROTL(x, n) ((x << n) | (x >> ((sizeof(x) << 3) - n)))
+#define CH(x, y, z) ((x & y) ^ (~x & z))
 #define MAJ(x, y, z) ((x & y) ^ (x & z) ^ (y & z))
 
-#define SHA256_F1(x) (ROTR(x,  2) ^ ROTR(x, 13) ^ ROTR(x, 22))
-#define SHA256_F2(x) (ROTR(x,  6) ^ ROTR(x, 11) ^ ROTR(x, 25))
-#define SHA256_F3(x) (ROTR(x,  7) ^ ROTR(x, 18) ^ SHFR(x,  3))
+#define SHA256_F1(x) (ROTR(x, 2) ^ ROTR(x, 13) ^ ROTR(x, 22))
+#define SHA256_F2(x) (ROTR(x, 6) ^ ROTR(x, 11) ^ ROTR(x, 25))
+#define SHA256_F3(x) (ROTR(x, 7) ^ ROTR(x, 18) ^ SHFR(x, 3))
 #define SHA256_F4(x) (ROTR(x, 17) ^ ROTR(x, 19) ^ SHFR(x, 10))
 
-#define UNPACK32(x, str)                              \
-	{                                             \
-		*((str) + 3) = (uint8_t) ((x));       \
-		*((str) + 2) = (uint8_t) ((x) >>  8); \
-		*((str) + 1) = (uint8_t) ((x) >> 16); \
-		*((str) + 0) = (uint8_t) ((x) >> 24); \
+#define UNPACK32(x, str)                     \
+	{                                        \
+		*((str) + 3) = (uint8_t)((x));       \
+		*((str) + 2) = (uint8_t)((x) >> 8);  \
+		*((str) + 1) = (uint8_t)((x) >> 16); \
+		*((str) + 0) = (uint8_t)((x) >> 24); \
 	}
 
-#define PACK32(str, x)                              \
-	{                                           \
-	*(x) =   ((uint32_t) *((str) + 3))         \
-		| ((uint32_t) *((str) + 2) <<  8)  \
-		| ((uint32_t) *((str) + 1) << 16)  \
-		| ((uint32_t) *((str) + 0) << 24); \
+#define PACK32(str, x)                                                                                                                             \
+	{                                                                                                                                              \
+		*(x) = ((uint32_t) * ((str) + 3)) | ((uint32_t) * ((str) + 2) << 8) | ((uint32_t) * ((str) + 1) << 16) | ((uint32_t) * ((str) + 0) << 24); \
 	}
 
 /* Macros used for loops unrolling */
-#define SHA256_SCR(i)                               \
-{                                                   \
-	w[i] =  SHA256_F4(w[i -  2]) + w[i -  7]    \
-		+ SHA256_F3(w[i - 15]) + w[i - 16]; \
-}
+#define SHA256_SCR(i)                                                             \
+	{                                                                             \
+		w[i] = SHA256_F4(w[i - 2]) + w[i - 7] + SHA256_F3(w[i - 15]) + w[i - 16]; \
+	}
 
-#define SHA256_EXP(a, b, c, d, e, f, g, h, j)                   \
-{                                                               \
-	t1 = wv[h] + SHA256_F2(wv[e]) + CH(wv[e], wv[f], wv[g]) \
-		+ sha256_k[j] + w[j];                           \
-	t2 = SHA256_F1(wv[a]) + MAJ(wv[a], wv[b], wv[c]);       \
-	wv[d] += t1;                                            \
-	wv[h] = t1 + t2;                                        \
-}
-
+#define SHA256_EXP(a, b, c, d, e, f, g, h, j)                                         \
+	{                                                                                 \
+		t1 = wv[h] + SHA256_F2(wv[e]) + CH(wv[e], wv[f], wv[g]) + sha256_k[j] + w[j]; \
+		t2 = SHA256_F1(wv[a]) + MAJ(wv[a], wv[b], wv[c]);                             \
+		wv[d] += t1;                                                                  \
+		wv[h] = t1 + t2;                                                              \
+	}
 
 uint32_t sha256_h0[8] = {
 	0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-	0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
-};
+	0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
 
 uint32_t sha256_k[64] = {
 	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
@@ -107,15 +100,14 @@ uint32_t sha256_k[64] = {
 	0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
 	0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
 	0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
-	0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
-};
+	0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
 
 /* SHA-256 functions */
 void sha256_transf(struct sha256_ctx *ctx, const unsigned char *message,
-		   unsigned int block_nb)
+				   unsigned int block_nb)
 {
-	uint32_t w[64] = { };
-	uint32_t wv[8] = { };
+	uint32_t w[64] = {};
+	uint32_t wv[8] = {};
 	uint32_t t1 = 0;
 	uint32_t t2 = 0;
 	const unsigned char *sub_block = NULL;
@@ -124,7 +116,8 @@ void sha256_transf(struct sha256_ctx *ctx, const unsigned char *message,
 	int j = 0;
 #endif
 
-	for (i = 0; i < (int)block_nb; i++) {
+	for (i = 0; i < (int)block_nb; i++)
+	{
 		sub_block = message + (i << 6);
 
 #ifndef UNROLL_LOOPS
@@ -137,9 +130,9 @@ void sha256_transf(struct sha256_ctx *ctx, const unsigned char *message,
 		for (j = 0; j < 8; j++)
 			wv[j] = ctx->h[j];
 
-		for (j = 0; j < 64; j++) {
-			t1 = wv[7] + SHA256_F2(wv[4]) + CH(wv[4], wv[5], wv[6])
-			    + sha256_k[j] + w[j];
+		for (j = 0; j < 64; j++)
+		{
+			t1 = wv[7] + SHA256_F2(wv[4]) + CH(wv[4], wv[5], wv[6]) + sha256_k[j] + w[j];
 			t2 = SHA256_F1(wv[0]) + MAJ(wv[0], wv[1], wv[2]);
 			wv[7] = wv[6];
 			wv[6] = wv[5];
@@ -307,9 +300,9 @@ void sha256_transf(struct sha256_ctx *ctx, const unsigned char *message,
 }
 
 void sha256(const unsigned char *message,
-	    unsigned int len, unsigned char *digest)
+			unsigned int len, unsigned char *digest)
 {
-	struct sha256_ctx ctx = { };
+	struct sha256_ctx ctx = {};
 
 	sha256_init(&ctx);
 	sha256_update(&ctx, message, len);
@@ -339,7 +332,7 @@ void sha256_init(struct sha256_ctx *ctx)
 }
 
 void sha256_update(struct sha256_ctx *ctx, const unsigned char *message,
-		   unsigned int len)
+				   unsigned int len)
 {
 	unsigned int block_nb = 0;
 	unsigned int new_len = 0;
@@ -354,7 +347,8 @@ void sha256_update(struct sha256_ctx *ctx, const unsigned char *message,
 	for (i = 0; i < rem_len; i++)
 		ctx->block[ctx->len + i] = message[i];
 
-	if (ctx->len + len < SHA256_BLOCK_SIZE) {
+	if (ctx->len + len < SHA256_BLOCK_SIZE)
+	{
 		ctx->len += len;
 		return;
 	}

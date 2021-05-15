@@ -7,7 +7,7 @@ Trusted Applications for OP-TEE for compromise assessment and an authenticated e
 
 Create files.txt with the list of filenames(newline separated) in the directory on which you want to run compromise assessment. Run the following command in the normal world environment.
 ```
-test_ta <flag> 
+assess <flag> 
 ```
 
 the value of flag can be: 

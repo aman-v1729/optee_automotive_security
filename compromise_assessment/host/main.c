@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <tee_client_api.h>
 
-#include <test_ta.h>
+#include <assess.h>
 
 struct ta_attrs
 {
@@ -25,7 +25,7 @@ struct MerkleTree *Node(char *hash_value)
 	struct MerkleTree *node = (struct MerkleTree *)malloc(sizeof(struct MerkleTree));
 
 	// Assign data to this node
-	strcpy(node->hash, hash_value);
+	memcpy(node->hash, hash_value, 32);
 	node->left = NULL;
 	node->right = NULL;
 	return (node);
@@ -33,7 +33,7 @@ struct MerkleTree *Node(char *hash_value)
 
 void prepare_ta_session(struct ta_attrs *ta)
 {
-	TEEC_UUID uuid = TA_TEST_UUID;
+	TEEC_UUID uuid = TA_COMPROMISE_ASSESSMENT_UUID;
 	uint32_t origin;
 	TEEC_Result res;
 
@@ -174,25 +174,29 @@ void send_to_tee(struct ta_attrs *ta, char *in, size_t in_sz, char *out, size_t 
 	TEEC_Operation op;
 	uint32_t origin;
 	TEEC_Result res;
-	// printf("out : %s\n", out);
 
 	prepare_op(&op, in, in_sz, out, out_sz);
-	// printf("out2 : %s\n", out);
 
 	res = TEEC_InvokeCommand(&ta->sess, mode, &op, &origin);
 	if (res != TEEC_SUCCESS)
 		errx(1, "\nFAIL\n", res, origin);
-	printf("Received from TEE: %s\n", (char *)op.params[1].tmpref.buffer);
+	printf("Received from TEE: ");
+	fwrite(op.params[1].tmpref.buffer, sizeof(char), 32, stdout);
+	fprintf(stdout, "\n");
+
 	char *ret;
 	ret = (char *)op.params[1].tmpref.buffer;
-	strcpy(hashed, ret);
+	memcpy(hashed, ret, 32);
 }
 
 void printTree(struct MerkleTree *node, int d)
 {
 	if (node == NULL)
 		return;
-	printf("%d: %s\n", d, node->hash);
+	printf("%d: ", d);
+	fwrite(node->hash, sizeof(char), 32, stdout);
+	fprintf(stdout, "\n");
+
 	printTree(node->left, d + 1);
 	printTree(node->right, d + 1);
 }
@@ -232,14 +236,10 @@ int main(int argc, char *argv[])
 	send_to_tee(&ta, word, bufferLength, out_word, bufferLength, TA_PLAIN_TEXT);
 	while ((read = getline(&line, &len_file, fp)) != -1)
 	{
-		// printf("Retrieved line of length %zu:\n", read);
-		// printf("%s", line);
 		int line_len = strlen(line);
-		// printf("%d", len);
 
 		if (line[line_len - 1] == '\n')
 			line[line_len - 1] = 0;
-		// printf("%s", line);
 
 		FILE *infile;
 		char *buffer;
@@ -265,10 +265,10 @@ int main(int argc, char *argv[])
 
 		char content[7000];
 
-		strcpy(content, buffer);
+		memcpy(content, buffer, numbytes);
 		free(buffer);
 		// printf("%s", content);
-		send_to_tee(&ta, content, 7000, out_word, bufferLength, TA_SHA256);
+		send_to_tee(&ta, content, numbytes, out_word, bufferLength, TA_SHA256);
 		node[n++] = Node((char *)hashed);
 	}
 	fclose(fp);
@@ -283,12 +283,12 @@ int main(int argc, char *argv[])
 		for (i = 0; i < m; i++)
 		{
 			char str[128];
-			strcpy(str, node[2 * i]->hash);
-			strcat(str, node[2 * i + 1]->hash);
+			memcpy(str, node[2 * i]->hash, 32);
+			for (int j = 0; j < 32; j++)
+				str[32 + j] = node[2 * i + 1]->hash[j];
 			struct MerkleTree *left = node[2 * i];
 			struct MerkleTree *right = node[2 * i + 1];
-			// printf("concat: %s\n", str);
-			send_to_tee(&ta, str, 128, out_word, bufferLength, TA_SHA256);
+			send_to_tee(&ta, str, 64, out_word, bufferLength, TA_SHA256);
 			node[i] = Node((char *)hashed);
 			node[i]->left = left;
 			node[i]->right = right;
@@ -309,10 +309,13 @@ int main(int argc, char *argv[])
 
 	char root_id[] = "merkle_root";
 	char merkle_root[bufferLength];
-	strcpy(merkle_root, root->hash);
+	memcpy(merkle_root, root->hash, 32);
 
-	printf("ROOT: %s\n", merkle_root);
-	// printf("ROOT SIZE: %d\n", strlen(merkle_root));
+	printf("ROOT: ");
+	fwrite(merkle_root, sizeof(char), 32, stdout);
+	fprintf(stdout, "\n");
+
+	// printf("ROOT: %d\n", strlen(merkle_root));
 	// printf("%s", word);
 	char read_data[bufferLength];
 	TEEC_Result res;
@@ -323,7 +326,7 @@ int main(int argc, char *argv[])
 		printf("- Create and load object in the TA secure storage\n");
 
 		res = write_secure_object(&ta, root_id,
-								  merkle_root, sizeof(merkle_root));
+								  merkle_root, 32);
 		if (res != TEEC_SUCCESS)
 			errx(1, "Failed to create an object in the secure storage");
 	}
@@ -333,13 +336,13 @@ int main(int argc, char *argv[])
 		printf("- Read back previously stored hash tree root value: \n");
 
 		res = read_secure_object(&ta, root_id,
-								 read_data, sizeof(read_data));
+								 read_data, 32);
 		if (res != TEEC_SUCCESS)
 			errx(1, "Failed to read an object from the secure storage");
 
 		printf("%s\n", read_data);
 
-		if (memcmp(merkle_root, read_data, sizeof(merkle_root)))
+		if (memcmp(merkle_root, read_data, 32))
 			errx(1, "Compromise detected!");
 
 		printf("Root matches the trusted storage!\n");
